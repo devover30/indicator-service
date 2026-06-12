@@ -1,0 +1,25 @@
+[project]
+name = "ta-engine"
+version = "0.1.0"
+description = "Computes technical indicators from OHLCV bars."
+readme = "README.md"
+requires-python = ">=3.14"
+dependencies = [
+    "numpy",
+    "ta-lib",
+    "redis",
+    "loguru",
+]
+
+[project.scripts]
+ta-engine = "ta_engine.__main__:main"
+
+[dependency-groups]
+dev = [
+    "pytest",
+    "ruff",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"

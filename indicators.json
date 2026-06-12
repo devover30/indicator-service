@@ -1,0 +1,16 @@
+{
+    "NSE:NIFTY50-INDEX": [
+        {
+            "name": "supertrend",
+            "length": 7,
+            "factor": 3
+        }
+    ],
+    "NSE:MIDCPNIFTY-INDEX": [
+        {
+            "name": "supertrend",
+            "length": 7,
+            "factor": 3
+        }
+    ]
+}
