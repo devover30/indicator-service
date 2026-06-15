@@ -19,6 +19,15 @@ class Settings:
     candle_channel: str = os.getenv("TA_CANDLE_CHANNEL", "candle:5min")
     results_channel: str = os.getenv("TA_RESULTS_CHANNEL", "indicators:5min")
     spec_path: str = os.getenv("TA_SPEC_PATH", "indicators.json")
+    # Channel on which we ask candle-service for historical candles at startup.
+    history_request_channel: str = os.getenv(
+        "TA_HISTORY_CHANNEL", "candle:history:request"
+    )
+    history_reply_key: str = os.getenv(
+        "TA_HISTORY_REPLY_KEY", "candle:history:reply"
+    )
+    timeframe: str = os.getenv("TA_TIMEFRAME", "5min")
+    history_timeout: float = float(os.getenv("TA_HISTORY_TIMEOUT", "10"))
 
 
 def load_spec(path: str | Path) -> dict[str, list[IndicatorRequest]]:
@@ -39,6 +48,19 @@ def load_spec(path: str | Path) -> dict[str, list[IndicatorRequest]]:
     return spec
 
 
+# Warm-up multiples of `period`. Recursive indicators need more than `period`
+# bars before their output is trustworthy; simple ones just need `period`.
+_WARMUP = {
+    "supertrend": 4,
+    "rsi": 3,
+}
+
+
+def lookback(req: IndicatorRequest) -> int:
+    """Bars this indicator needs before it yields a stable (non-NaN) value."""
+    return req.period * _WARMUP.get(req.name, 1)
+
+
 def required_lookback(requests: list[IndicatorRequest]) -> int:
-    """Largest period across a symbol's indicators — how much history to seed."""
-    return max((r.period for r in requests), default=1)
+    """Largest warm-up-aware lookback across a symbol's indicators."""
+    return max((lookback(r) for r in requests), default=1)

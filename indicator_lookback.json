@@ -1,0 +1,135 @@
+{
+    "indicators": [
+        {
+            "name": "SMA",
+            "default_period": 14,
+            "lookback_required": true,
+            "minimum_candles_formula": "period + 20"
+        },
+        {
+            "name": "EMA",
+            "default_period": 14,
+            "lookback_required": true,
+            "minimum_candles_formula": "period + 20"
+        },
+        {
+            "name": "WMA",
+            "default_period": 14,
+            "lookback_required": true,
+            "minimum_candles_formula": "period + 20"
+        },
+        {
+            "name": "VWAP",
+            "default_period": null,
+            "lookback_required": false,
+            "minimum_candles_formula": "0"
+        },
+        {
+            "name": "RSI",
+            "default_period": 14,
+            "lookback_required": true,
+            "minimum_candles_formula": "period + 20"
+        },
+        {
+            "name": "MACD",
+            "default_period": {
+                "fast": 12,
+                "slow": 26,
+                "signal": 9
+            },
+            "lookback_required": true,
+            "minimum_candles_formula": "slow + signal + 20"
+        },
+        {
+            "name": "Bollinger Bands",
+            "default_period": 20,
+            "lookback_required": true,
+            "minimum_candles_formula": "period + 20"
+        },
+        {
+            "name": "ATR",
+            "default_period": 14,
+            "lookback_required": true,
+            "minimum_candles_formula": "period + 20"
+        },
+        {
+            "name": "ADX",
+            "default_period": 14,
+            "lookback_required": true,
+            "minimum_candles_formula": "(2 * period) + 20"
+        },
+        {
+            "name": "Supertrend",
+            "default_period": 14,
+            "lookback_required": true,
+            "minimum_candles_formula": "period + 20"
+        },
+        {
+            "name": "Stochastic Oscillator",
+            "default_period": {
+                "k_period": 14,
+                "d_period": 3
+            },
+            "lookback_required": true,
+            "minimum_candles_formula": "k_period + 20"
+        },
+        {
+            "name": "CCI",
+            "default_period": 20,
+            "lookback_required": true,
+            "minimum_candles_formula": "period + 20"
+        },
+        {
+            "name": "ROC",
+            "default_period": 12,
+            "lookback_required": true,
+            "minimum_candles_formula": "period + 20"
+        },
+        {
+            "name": "Momentum",
+            "default_period": 10,
+            "lookback_required": true,
+            "minimum_candles_formula": "period + 20"
+        },
+        {
+            "name": "Williams %R",
+            "default_period": 14,
+            "lookback_required": true,
+            "minimum_candles_formula": "period + 20"
+        },
+        {
+            "name": "Parabolic SAR",
+            "default_period": {
+                "acceleration_factor": 0.02,
+                "max_acceleration": 0.2
+            },
+            "lookback_required": true,
+            "minimum_candles_formula": "20"
+        },
+        {
+            "name": "Ichimoku Cloud",
+            "default_period": {
+                "tenkan": 9,
+                "kijun": 26,
+                "senkou_b": 52
+            },
+            "lookback_required": true,
+            "minimum_candles_formula": "max(tenkan, kijun, senkou_b) + 48"
+        },
+        {
+            "name": "Donchian Channel",
+            "default_period": 20,
+            "lookback_required": true,
+            "minimum_candles_formula": "period + 20"
+        },
+        {
+            "name": "Keltner Channel",
+            "default_period": {
+                "ema_period": 20,
+                "atr_period": 10
+            },
+            "lookback_required": true,
+            "minimum_candles_formula": "max(ema_period, atr_period) + 20"
+        }
+    ]
+}

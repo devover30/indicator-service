@@ -12,6 +12,7 @@ def main() -> None:
     setup_logging()
     engine, client = build_engine()
     logger.info("ta-engine running — symbols: {}", ", ".join(engine.spec))
+    engine.seed_history(client)  # fill windows from candle-service before live
     try:
         engine.run(client)
     except KeyboardInterrupt:

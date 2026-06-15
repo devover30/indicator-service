@@ -10,7 +10,7 @@ class Bar:
     """A single OHLCV bar."""
 
     symbol: str
-    timestamp: int  # epoch seconds (or ms — pick one and be consistent)
+    timestamp: str | int  # ISO-8601 string or epoch number; passed through
     open: float
     high: float
     low: float
@@ -42,5 +42,5 @@ class IndicatorResult:
     """Computed values for one symbol at one point in time."""
 
     symbol: str
-    timestamp: int
+    timestamp: str | int
     values: dict  # label -> float, e.g. {"sma_20": 191.3, "vwap": 190.8}
