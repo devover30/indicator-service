@@ -40,7 +40,7 @@ def _bar_from_dict(d: dict) -> Bar:
 
 
 def decode_bar(payload: str) -> Bar:
-    """All symbols share one channel, so the symbol comes from the payload."""
+    """Symbol is read from the payload (also encoded in the channel name)."""
     return _bar_from_dict(json.loads(payload))
 
 
@@ -87,16 +87,19 @@ def encode_result(result: IndicatorResult) -> str:
     })
 
 
-def subscribe_bars(client: redis.Redis, channel: str) -> Iterator[Bar]:
-    """Yield bars from the candle channel, surviving idle timeouts and drops.
+def subscribe_bars(client: redis.Redis, channels: list[str]) -> Iterator[Bar]:
+    """Yield bars from the per-symbol candle channels, surviving idle timeouts
+    and drops.
 
-    A read timeout while idle is normal (no message arrived) — we just keep
-    waiting. If the connection actually drops, we back off and resubscribe.
+    candle-service publishes one channel per symbol ("candle:5:<symbol>"); we
+    subscribe to all of them at once. A read timeout while idle is normal (no
+    message arrived) — we just keep waiting. If the connection actually drops,
+    we back off and resubscribe to every channel.
     """
     while True:
         pubsub = client.pubsub()
         try:
-            pubsub.subscribe(channel)
+            pubsub.subscribe(*channels)
             for message in pubsub.listen():
                 if message["type"] != "message":
                     continue

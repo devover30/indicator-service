@@ -40,21 +40,27 @@ so a seeded candle that the live feed later republishes isn't double-counted.
 ## Configuration
 
 `indicators.json` holds the slow-changing spec — which indicators to compute
-per symbol, with their parameters:
+per symbol, with their parameters. Parameter names are flexible: `length` is
+accepted for `period`, `factor` for `multiplier` (so TradingView-style specs
+work as-is):
 
 ```json
 {
   "NSE:NIFTY50-INDEX": [
-    { "name": "sma", "period": 20 },
-    { "name": "rsi", "period": 14 },
-    { "name": "supertrend", "period": 10, "multiplier": 3 }
+    { "name": "supertrend", "length": 7, "factor": 3 }
   ]
 }
 ```
 
-Recursive indicators need a warm-up longer than their `period`; `config.py`
-sizes each symbol's window accordingly (`_WARMUP` map). Supertrend(10) needs
-~40 candles, RSI(14) ~42.
+`indicator_lookback.json` is the reference table that says, per indicator,
+whether history is required and how many candles to fetch — via a
+`minimum_candles_formula` (e.g. `"period + 20"`, `"slow + signal + 20"`,
+`"max(tenkan, kijun, senkou_b) + 48"`). On startup the engine matches each
+spec entry to this table by name and evaluates the formula using the **actual**
+params, so a smaller `length` asks for fewer candles (Supertrend `length: 7`
+needs `7 + 20 = 27`, not the default `34`). Indicators absent from the table
+fall back to a safe constant; `lookback_required: false` (VWAP) needs none.
+The formula assumes a 5-minute timeframe.
 
 Runtime settings come from environment variables (defaults in `config.py`):
 
@@ -68,6 +74,7 @@ Runtime settings come from environment variables (defaults in `config.py`):
 | `TA_TIMEFRAME`         | `5min`                   | timeframe sent in history requests   |
 | `TA_HISTORY_TIMEOUT`   | `10`                     | seconds to wait for a history reply  |
 | `TA_SPEC_PATH`         | `indicators.json`        | path to the spec                     |
+| `TA_LOOKBACK_PATH`     | `indicator_lookback.json`| path to the lookback reference       |
 | `TA_LOG_LEVEL`         | `INFO`                   | loguru level                         |
 
 ## candle-service contract (history backfill)

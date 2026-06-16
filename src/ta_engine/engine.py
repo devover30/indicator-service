@@ -13,29 +13,32 @@ from loguru import logger
 import redis
 
 from . import indicators, redis_io
-from .config import Settings, load_spec, required_lookback
+from .config import Settings, load_spec, load_lookback_reference, required_lookback
 from .models import Bar, IndicatorRequest, IndicatorResult
 
 
 class Engine:
     def __init__(self, settings: Settings,
-                 spec: dict[str, list[IndicatorRequest]]):
+                 spec: dict[str, list[IndicatorRequest]],
+                 reference: dict[str, dict]):
         self.settings = settings
         self.spec = spec
-        # per-symbol rolling window, capped at the lookback that symbol needs
+        self.reference = reference
+        # Precompute the lookback each symbol needs (from the reference
+        # formulas + actual params), then size its window to match.
+        self.needed: dict[str, int] = {}
         self.windows: dict[str, deque[Bar]] = {}
         for symbol, reqs in spec.items():
-            maxlen = max(required_lookback(reqs), 1)
-            self.windows[symbol] = deque(maxlen=maxlen)
+            n = required_lookback(reqs, reference)
+            self.needed[symbol] = n
+            self.windows[symbol] = deque(maxlen=max(n, 1))
 
     def on_bar(self, bar: Bar) -> IndicatorResult | None:
         reqs = self.spec.get(bar.symbol)
-        logger.info("reqs: {}", reqs)
         if not reqs:
             return None  # symbol not in spec, ignore
 
         window = self.windows[bar.symbol]
-        logger.info("window: {}", window)
 
         # Skip a candle we already have (e.g. a seeded bar that the live feed
         # then republishes) so it isn't double-counted in recursive indicators.
@@ -43,11 +46,9 @@ class Engine:
             return None
 
         window.append(bar)
-        logger.info("window: {}", window)
 
         # not enough history yet to satisfy the largest lookback
-        needed = required_lookback(reqs)
-        logger.info("needed: {}", needed)
+        needed = self.needed[bar.symbol]
         if len(window) < needed:
             logger.debug(
                 "{} warming up: {}/{} bars", bar.symbol, len(window), needed
@@ -66,8 +67,8 @@ class Engine:
         opened (or candle-service returns fewer), we seed what we get and the
         rest warms up from the live feed.
         """
-        for symbol, reqs in self.spec.items():
-            needed = required_lookback(reqs)
+        for symbol in self.spec:
+            needed = self.needed[symbol]
             bars = redis_io.request_history(
                 client,
                 self.settings.history_request_channel,
@@ -90,8 +91,9 @@ class Engine:
                 )
 
     def run(self, client: redis.Redis) -> None:
-        logger.info("subscribing to {}", self.settings.candle_channel)
-        for bar in redis_io.subscribe_bars(client, self.settings.candle_channel):
+        channels = [self.settings.candle_channel(sym) for sym in self.spec]
+        logger.info("subscribing to {}", channels)
+        for bar in redis_io.subscribe_bars(client, channels):
             result = self.on_bar(bar)
             if result is not None:
                 redis_io.publish_result(
@@ -102,5 +104,6 @@ class Engine:
 def build_engine() -> tuple[Engine, redis.Redis]:
     settings = Settings()
     spec = load_spec(settings.spec_path)
+    reference = load_lookback_reference(settings.lookback_spec_path)
     client = redis_io.connect(settings.redis_url)
-    return Engine(settings, spec), client
+    return Engine(settings, spec, reference), client

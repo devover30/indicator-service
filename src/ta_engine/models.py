@@ -4,6 +4,21 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
+# Spec authors use domain-friendly names; the code and lookback formulas use
+# canonical ones. Map the former to the latter so either spelling works.
+PARAM_ALIASES = {
+    "length": "period",
+    "timeperiod": "period",
+    "n": "period",
+    "factor": "multiplier",
+    "mult": "multiplier",
+}
+
+
+def canonical_param(name: str) -> str:
+    """e.g. 'length' -> 'period', 'factor' -> 'multiplier'."""
+    return PARAM_ALIASES.get(name.lower(), name.lower())
+
 
 @dataclass(frozen=True)
 class Bar:
@@ -25,15 +40,26 @@ class IndicatorRequest:
     name: str
     params: dict = field(default_factory=dict)
 
+    def get(self, canonical: str, default=None):
+        """Read a param by canonical name, honouring aliases.
+
+        get('period') finds 'period', 'length', 'timeperiod', or 'n';
+        get('multiplier') finds 'multiplier' or 'factor'.
+        """
+        for key, value in self.params.items():
+            if canonical_param(key) == canonical:
+                return value
+        return default
+
     @property
     def period(self) -> int:
         """Lookback period, or 1 if the indicator doesn't use one."""
-        return int(self.params.get("period", 1))
+        return int(self.get("period", 1))
 
     @property
     def label(self) -> str:
-        """Stable key for the result, e.g. 'sma_20'."""
-        p = self.params.get("period")
+        """Stable key for the result, e.g. 'supertrend_7'."""
+        p = self.get("period")
         return f"{self.name}_{p}" if p is not None else self.name
 
 
