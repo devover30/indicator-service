@@ -11,6 +11,8 @@ import talib
 
 from .models import Bar, IndicatorRequest
 
+def atr(highs, lows, closes, period=14) -> float:
+    return float(talib.ATR(highs, lows, closes, timeperiod=period)[-1])
 
 def sma(closes: np.ndarray, period: int) -> float:
     return float(talib.SMA(closes, timeperiod=period)[-1])
@@ -101,6 +103,9 @@ def compute_one(req: IndicatorRequest, cols: dict[str, np.ndarray]) -> float:
             period=req.period,
             multiplier=float(req.get("multiplier", 3.0)),
         )
+    if req.name == "atr":
+        return atr(cols["high"], cols["low"], cols["close"], req.period)
+
     raise ValueError(f"unknown indicator: {req.name!r}")
 
 

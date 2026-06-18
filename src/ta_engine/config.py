@@ -6,11 +6,16 @@ import json
 import os
 import re
 from dataclasses import dataclass
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 from dotenv import load_dotenv
 
 from .models import IndicatorRequest, canonical_param
+
+# Market timezone — candles carry +05:30, so the daily cutoff is judged in IST
+# regardless of where the host runs.
+IST = timezone(timedelta(hours=5, minutes=30))
 
 # Load .env BEFORE Settings is defined: the field defaults below call
 # os.getenv() at class-definition (import) time, so the file must be read
@@ -28,7 +33,9 @@ class Settings:
     # "<prefix><symbol>" e.g. "candle:5:NSE:NIFTY50-INDEX". The symbol is still
     # carried in each payload too, so decoding is unchanged.
     candle_channel_prefix: str = os.getenv("TA_CANDLE_CHANNEL_PREFIX", "candle:5:")
-    results_channel: str = os.getenv("TA_RESULTS_CHANNEL", "indicators:5min")
+    # Results are also published one channel PER symbol: "<prefix><symbol>"
+    # e.g. "indicators:NSE:NIFTY50-INDEX". The symbol stays in the payload too.
+    results_channel_prefix: str = os.getenv("TA_RESULTS_CHANNEL_PREFIX", "indicators:")
     spec_path: str = os.getenv("TA_SPEC_PATH", "indicators.json")
     lookback_spec_path: str = os.getenv(
         "TA_LOOKBACK_PATH", "indicator_lookback.json"
@@ -42,10 +49,24 @@ class Settings:
     )
     timeframe: str = os.getenv("TA_TIMEFRAME", "5min")
     history_timeout: float = float(os.getenv("TA_HISTORY_TIMEOUT", "10"))
+    # Daily stop time (HH:MM, IST). The service won't start after this and
+    # exits cleanly once the wall clock reaches it while running.
+    run_until: str = os.getenv("TA_RUN_UNTIL", "15:00")
 
     def candle_channel(self, symbol: str) -> str:
         """Per-symbol live channel, e.g. 'candle:5:NSE:NIFTY50-INDEX'."""
         return f"{self.candle_channel_prefix}{symbol}"
+
+    def results_channel(self, symbol: str) -> str:
+        """Per-symbol results channel, e.g. 'indicators:NSE:NIFTY50-INDEX'."""
+        return f"{self.results_channel_prefix}{symbol}"
+
+    def past_cutoff(self, now: datetime | None = None) -> bool:
+        """True once the IST wall clock has reached the daily run_until time."""
+        now = (now or datetime.now(IST)).astimezone(IST)
+        hour, minute = (int(p) for p in self.run_until.split(":"))
+        cutoff = now.replace(hour=hour, minute=minute, second=0, microsecond=0)
+        return now >= cutoff
 
 
 def load_spec(path: str | Path) -> dict[str, list[IndicatorRequest]]:

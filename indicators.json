@@ -12,5 +12,10 @@
             "length": 7,
             "factor": 3
         }
+    ],
+    "NSE:BSE-EQ": [
+        {
+            "name": "atr"
+        }
     ]
 }

@@ -1,9 +1,9 @@
 # ta-engine
 
 A small service that reads 5-minute OHLCV candles from Redis, computes
-technical indicators (SMA, RSI, VWAP, Supertrend), and publishes the results
-back to Redis. It pairs with a separate **candle-service** that produces the
-candles and serves historical ones for warm-up.
+technical indicators (SMA, RSI, ATR, VWAP, Supertrend), and publishes the
+results back to Redis. It pairs with a separate **candle-service** that produces
+the candles and serves historical ones for warm-up.
 
 Pure calculation lives in `indicators.py` and never touches I/O, so it's
 trivially testable. `redis_io.py` is the only module that knows Redis exists.
@@ -14,9 +14,14 @@ read -> compute -> publish loop.
 
 ```bash
 uv sync             # install deps from the lock file
+cp .env.example .env  # optional: override defaults locally
 uv run ta-engine    # run the service
 uv run pytest       # run tests
 ```
+
+Settings come from environment variables; a `.env` file in the working
+directory is loaded automatically at startup (via python-dotenv). Real
+environment variables take precedence over `.env`.
 
 The TA-Lib Python wrapper needs the underlying TA-Lib C library. On recent
 versions (0.6.5+) `pip`/`uv` pulls a prebuilt wheel that bundles it. If you're
@@ -30,12 +35,21 @@ on a platform without a wheel, install the C library first (e.g.
    lookback candles it needs and fills a rolling window (see the contract
    below). If the market just opened or no reply comes, it warms up from the
    live feed instead.
-3. **Live** — the engine subscribes to one candle channel, updates the per-symbol
-   window as candles arrive, computes the indicators, and publishes results.
+3. **Live** — the engine subscribes to one candle channel **per symbol**,
+   updates that symbol's window as candles arrive, computes the indicators, and
+   publishes results to a per-symbol results channel.
 
-All symbols share a single live channel; the symbol is carried in each candle
-payload. A candle whose timestamp matches the last one in the window is skipped,
-so a seeded candle that the live feed later republishes isn't double-counted.
+Both candles and results use per-symbol channels: candles arrive on
+`candle:5:<symbol>` (e.g. `candle:5:NSE:NIFTY50-INDEX`) and results go out on
+`indicators:<symbol>`. The symbol is also carried in each payload. A candle
+whose timestamp matches the last one in the window is skipped, so a seeded
+candle that the live feed later republishes isn't double-counted.
+
+**Daily cutoff** — the service is meant for market hours only. It refuses to
+start after `TA_RUN_UNTIL` (default 15:00 IST) and exits cleanly once the wall
+clock reaches that time while running. The cutoff is judged in IST regardless
+of the host's timezone. The in-loop check fires as candles arrive, so the stop
+happens on the first candle at/after the cutoff.
 
 ## Configuration
 
@@ -64,18 +78,23 @@ The formula assumes a 5-minute timeframe.
 
 Runtime settings come from environment variables (defaults in `config.py`):
 
-| Variable               | Default                  | Meaning                              |
-|------------------------|--------------------------|--------------------------------------|
-| `TA_REDIS_URL`         | `redis://localhost:6379/0` | Redis connection                   |
-| `TA_CANDLE_CHANNEL`    | `candle:5min`            | live candles in                      |
-| `TA_RESULTS_CHANNEL`   | `indicators:5min`        | results out                          |
-| `TA_HISTORY_CHANNEL`   | `candle:history:request` | history request channel              |
-| `TA_HISTORY_REPLY_KEY` | `candle:history:reply`   | history reply key (BLPOP target)     |
-| `TA_TIMEFRAME`         | `5min`                   | timeframe sent in history requests   |
-| `TA_HISTORY_TIMEOUT`   | `10`                     | seconds to wait for a history reply  |
-| `TA_SPEC_PATH`         | `indicators.json`        | path to the spec                     |
-| `TA_LOOKBACK_PATH`     | `indicator_lookback.json`| path to the lookback reference       |
-| `TA_LOG_LEVEL`         | `INFO`                   | loguru level                         |
+| Variable                   | Default                    | Meaning                                  |
+|----------------------------|----------------------------|------------------------------------------|
+| `TA_REDIS_URL`             | `redis://localhost:6379/0` | Redis connection                         |
+| `TA_CANDLE_CHANNEL_PREFIX` | `candle:5:`                | prefix for per-symbol candle channels    |
+| `TA_RESULTS_CHANNEL_PREFIX`| `indicators:`              | prefix for per-symbol results channels   |
+| `TA_HISTORY_CHANNEL`       | `candle:history:request`   | history request channel                  |
+| `TA_HISTORY_REPLY_KEY`     | `candle:history:reply`     | history reply key (BLPOP target)         |
+| `TA_TIMEFRAME`             | `5min`                     | timeframe sent in history requests       |
+| `TA_HISTORY_TIMEOUT`       | `10`                       | seconds to wait for a history reply      |
+| `TA_RUN_UNTIL`             | `15:00`                    | daily stop time (HH:MM, IST)             |
+| `TA_SPEC_PATH`             | `indicators.json`          | path to the spec                         |
+| `TA_LOOKBACK_PATH`         | `indicator_lookback.json`  | path to the lookback reference           |
+| `TA_LOG_LEVEL`             | `INFO`                     | loguru level                             |
+
+Channel names are built as `<prefix><symbol>`, so candles arrive on e.g.
+`candle:5:NSE:NIFTY50-INDEX` and results publish to `indicators:NSE:NIFTY50-INDEX`.
+Consumers should subscribe per symbol, or pattern-subscribe `indicators:*`.
 
 ## candle-service contract (history backfill)
 

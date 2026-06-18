@@ -94,15 +94,22 @@ class Engine:
         channels = [self.settings.candle_channel(sym) for sym in self.spec]
         logger.info("subscribing to {}", channels)
         for bar in redis_io.subscribe_bars(client, channels):
+            if self.settings.past_cutoff():
+                logger.info(
+                    "reached {} IST cutoff — stopping", self.settings.run_until
+                )
+                return
             result = self.on_bar(bar)
             if result is not None:
                 redis_io.publish_result(
-                    client, self.settings.results_channel, result
+                    client,
+                    self.settings.results_channel(result.symbol),
+                    result,
                 )
 
 
-def build_engine() -> tuple[Engine, redis.Redis]:
-    settings = Settings()
+def build_engine(settings: Settings | None = None) -> tuple[Engine, redis.Redis]:
+    settings = settings or Settings()
     spec = load_spec(settings.spec_path)
     reference = load_lookback_reference(settings.lookback_spec_path)
     client = redis_io.connect(settings.redis_url)
