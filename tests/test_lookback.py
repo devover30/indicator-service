@@ -1,6 +1,13 @@
 """Lookback computation from the reference formulas + actual params."""
 
-from ta_engine.config import lookback, required_lookback
+import json
+
+from ta_engine.config import (
+    lookback,
+    required_lookback,
+    resolve_request_defaults,
+    load_spec,
+)
 from ta_engine.models import IndicatorRequest
 
 REFERENCE = {
@@ -81,3 +88,75 @@ def test_required_lookback_is_the_max():
         IndicatorRequest("macd", {"slow": 26, "signal": 9}),  # 55
     ]
     assert required_lookback(reqs, REFERENCE) == 55
+
+
+# --- default-period resolution (compute side must match the lookback side) ---
+
+ATR_REFERENCE = {
+    "atr": {
+        "name": "ATR", "default_period": 14,
+        "lookback_required": True, "minimum_candles_formula": "period + 20",
+    },
+    "vwap": {
+        "name": "VWAP", "default_period": None,
+        "lookback_required": False, "minimum_candles_formula": "0",
+    },
+    "macd": {
+        "name": "MACD", "default_period": {"fast": 12, "slow": 26, "signal": 9},
+        "lookback_required": True, "minimum_candles_formula": "slow + signal + 20",
+    },
+}
+
+
+def test_missing_period_inherits_reference_default():
+    # {"name": "atr"} must resolve to the reference default (14), not 1.
+    req = resolve_request_defaults(IndicatorRequest("atr", {}), ATR_REFERENCE)
+    assert req.period == 14
+    assert req.label == "atr_14"
+
+
+def test_explicit_period_is_not_overridden():
+    req = resolve_request_defaults(
+        IndicatorRequest("atr", {"length": 7}), ATR_REFERENCE
+    )
+    assert req.period == 7  # spec wins over the default
+
+
+def test_scalar_default_keeps_compute_and_lookback_in_sync():
+    # The whole point: window size and timeperiod use the SAME period.
+    raw = IndicatorRequest("atr", {})
+    resolved = resolve_request_defaults(raw, ATR_REFERENCE)
+    assert lookback(resolved, ATR_REFERENCE) == 34  # 14 + 20
+    assert resolved.period == 14                      # not the silent 1
+
+
+def test_none_default_period_left_alone():
+    req = resolve_request_defaults(IndicatorRequest("vwap", {}), ATR_REFERENCE)
+    assert req.get("period") is None  # vwap has no period; nothing injected
+
+
+def test_dict_default_period_left_alone():
+    req = resolve_request_defaults(IndicatorRequest("macd", {}), ATR_REFERENCE)
+    assert req.get("period") is None  # dict defaults name their own vars
+
+
+def test_unknown_indicator_left_alone():
+    req = resolve_request_defaults(IndicatorRequest("nope", {}), ATR_REFERENCE)
+    assert req.get("period") is None
+
+
+def test_load_spec_applies_reference_defaults(tmp_path):
+    spec_file = tmp_path / "indicators.json"
+    spec_file.write_text(json.dumps({"NSE:BSE-EQ": [{"name": "atr"}]}))
+    spec = load_spec(spec_file, ATR_REFERENCE)
+    req = spec["NSE:BSE-EQ"][0]
+    assert req.period == 14
+    assert req.label == "atr_14"
+
+
+def test_load_spec_without_reference_is_unchanged(tmp_path):
+    # Backward compatible: no reference -> no injection (old behaviour).
+    spec_file = tmp_path / "indicators.json"
+    spec_file.write_text(json.dumps({"NSE:BSE-EQ": [{"name": "atr"}]}))
+    spec = load_spec(spec_file)
+    assert spec["NSE:BSE-EQ"][0].get("period") is None

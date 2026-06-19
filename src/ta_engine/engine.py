@@ -110,7 +110,7 @@ class Engine:
 
 def build_engine(settings: Settings | None = None) -> tuple[Engine, redis.Redis]:
     settings = settings or Settings()
-    spec = load_spec(settings.spec_path)
     reference = load_lookback_reference(settings.lookback_spec_path)
+    spec = load_spec(settings.spec_path, reference)
     client = redis_io.connect(settings.redis_url)
     return Engine(settings, spec, reference), client

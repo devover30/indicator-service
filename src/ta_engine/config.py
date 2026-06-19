@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 import os
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
@@ -69,11 +69,48 @@ class Settings:
         return now >= cutoff
 
 
-def load_spec(path: str | Path) -> dict[str, list[IndicatorRequest]]:
+def resolve_request_defaults(
+    req: IndicatorRequest, reference: dict[str, dict]
+) -> IndicatorRequest:
+    """Fill in a missing scalar period from the reference's default_period.
+
+    The reference is the single source of truth for default periods. The
+    lookback side already seeds `period` from default_period when the spec
+    omits it (see _formula_vars), so the compute side MUST do the same — or the
+    window gets sized for one period (e.g. 14 -> 34 bars) while the math runs
+    at another. That mismatch is the silent `period` default of 1 in
+    IndicatorRequest.period: an entry like {"name": "atr"} would size a 34-bar
+    window but compute a meaningless 1-period ATR (just the latest bar's true
+    range). Resolving the default here keeps both sides consistent.
+
+    Only a *scalar* default_period maps to the canonical `period`. Dict
+    defaults (MACD, stochastic, ...) name their own variables and are left
+    alone. If the spec already gave any period alias (length/timeperiod/n),
+    it wins and nothing is injected.
+    """
+    entry = reference.get(req.name.lower())
+    if entry is None:
+        return req
+    if req.get("period") is not None:
+        return req  # spec was explicit; respect it
+    default_period = entry.get("default_period")
+    if not isinstance(default_period, (int, float)) or isinstance(
+        default_period, bool
+    ):
+        return req  # None or dict default -> no canonical period to inject
+    return replace(req, params={**req.params, "period": default_period})
+
+
+def load_spec(
+    path: str | Path, reference: dict[str, dict] | None = None
+) -> dict[str, list[IndicatorRequest]]:
     """Parse indicators.json into {symbol: [IndicatorRequest, ...]}.
 
     Expected shape:
         {"AAPL": [{"name": "sma", "period": 20}, {"name": "vwap"}], ...}
+
+    If `reference` is given, any indicator whose spec entry omits a period
+    inherits the reference's default_period, so compute and lookback agree.
     """
     raw = json.loads(Path(path).read_text())
     spec: dict[str, list[IndicatorRequest]] = {}
@@ -82,7 +119,10 @@ def load_spec(path: str | Path) -> dict[str, list[IndicatorRequest]]:
         for entry in entries:
             params = dict(entry)
             name = params.pop("name").lower()  # normalise for matching
-            requests.append(IndicatorRequest(name=name, params=params))
+            req = IndicatorRequest(name=name, params=params)
+            if reference is not None:
+                req = resolve_request_defaults(req, reference)
+            requests.append(req)
         spec[symbol] = requests
     return spec
 
