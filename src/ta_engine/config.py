@@ -48,6 +48,11 @@ class Settings:
         "TA_HISTORY_REPLY_KEY", "candle:history:reply"
     )
     timeframe: str = os.getenv("TA_TIMEFRAME", "5min")
+    # A gap between consecutive candle timestamps larger than
+    # timeframe * max_gap_factor marks a session boundary (overnight / weekend /
+    # holiday). Bars across such a gap must not feed range indicators like ATR,
+    # or the cross-session price jump is counted as a single-bar True Range.
+    max_gap_factor: float = float(os.getenv("TA_MAX_GAP_FACTOR", "1.5"))
     history_timeout: float = float(os.getenv("TA_HISTORY_TIMEOUT", "10"))
     # Daily stop time (HH:MM, IST). The service won't start after this and
     # exits cleanly once the wall clock reaches it while running.
